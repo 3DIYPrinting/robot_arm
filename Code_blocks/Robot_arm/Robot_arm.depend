@@ -1,0 +1,48 @@
+# depslib dependency file v1.0
+1351756589 source:/home/alex/Github/robot_arm/Code_blocks/Robot_arm/main.cpp
+	<cstdlib>
+	<stdio.h>
+	<string.h>
+	<stdlib.h>
+	<iostream>
+	<sstream>
+	<stdexcept>
+	<vector>
+	<math.h>
+	<sys/signal.h>
+	<sys/types.h>
+	<sys/time.h>
+	"rs232.h"
+	"hklx.h"
+	<cppconn/driver.h>
+	<cppconn/exception.h>
+	<cppconn/resultset.h>
+	<cppconn/statement.h>
+	<cppconn/prepared_statement.h>
+
+1238393735 /home/alex/Github/robot_arm/Code_blocks/Robot_arm/rs232.h
+	<stdio.h>
+	<string.h>
+	<termios.h>
+	<sys/ioctl.h>
+	<unistd.h>
+	<fcntl.h>
+	<sys/types.h>
+	<sys/stat.h>
+	<limits.h>
+	<windows.h>
+
+1238397417 source:/home/alex/Github/robot_arm/Code_blocks/Robot_arm/rs232.c
+	"rs232.h"
+
+1351649168 source:/home/alex/Github/robot_arm/Code_blocks/Robot_arm/hklx.cpp
+	<cstdlib>
+	"hklx.h"
+	<stdio.h>
+	<string.h>
+	<sys/time.h>
+	"rs232.h"
+
+1351586014 /home/alex/Github/robot_arm/Code_blocks/Robot_arm/hklx.h
+	"stdint.h"
+

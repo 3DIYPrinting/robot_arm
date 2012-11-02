@@ -26,13 +26,16 @@ byte Servos_Idle_addr[NO_PWM] = {70,71,72,73,74,75};
 byte Servos_Rev_addr[NO_PWM] = {80,81,82,83,84,85};
 
 byte Pin_type[NO_PWM] = {0,0,0,0,0,0}; // 0=servo, 1=analog
-byte Servos_Pin[NO_PWM] = {3,5,6,9,10,11};
-byte Servos_Speed[NO_PWM] = {1,1,1,1,1,1};
+byte Servos_Pin[NO_PWM] = {3,5,6,10,9,11};
+byte Servos_Speed[NO_PWM] = {3,2,2,2,2,4};
 byte Servos_Angle[NO_PWM] = {90,90,90,90,90,90};
-byte Servos_Max[6] = {180,180,180,180,180,180};
-byte Servos_Min[6] = {0,0,0,0,0,0};
-byte Servos_Idle[6] = {128,128,128,128,128,128};
-byte Servos_Rev[NO_PWM] = {0,0,0,0,0,0}; // 0-standard, 1-reversed
+byte Servos_Max[6] = {180,170,170,170,180,156};
+byte Servos_Min[6] = {0,10,10,10,0,78};
+byte Servos_Idle[6] = {128,184,128,10,128,128};
+byte Servos_Rev[NO_PWM] = {0,0,0,1,0,0}; // 0-standard, 1-reversed
+
+byte buffer[255];
+byte input_buffer[255];
 
 void setup() 
 { 
@@ -52,7 +55,7 @@ void setup()
     {
       EEPROM.write(Pin_type_addr[i], Pin_type[i]);
       EEPROM.write(Servos_Pin_addr[i], Servos_Pin[i]);
-      EEPROM.write(Servos_Angle_addr[i], Servos_Angle[i]);
+      EEPROM.write(Servos_Angle_addr[i], Servos_Idle[i]);
       EEPROM.write(Servos_Speed_addr[i], Servos_Speed[i]);
       EEPROM.write(Servos_Max_addr[i], Servos_Max[i]);
       EEPROM.write(Servos_Min_addr[i], Servos_Min[i]);
@@ -69,22 +72,10 @@ void setup()
   
   for (i=0;i<NO_PWM;i++)
   {
-    Pin_type[i] = (byte) EEPROM.read(Pin_type_addr[i]);
-    Servos_Pin[i] = (byte) EEPROM.read(Servos_Pin_addr[i]);
-    Servos_Angle[i] = (byte) EEPROM.read(Servos_Angle_addr[i]);
-    Servos_Speed[i] = (byte) EEPROM.read(Servos_Speed_addr[i]);
-    Servos_Max[i] = (byte) EEPROM.read(Servos_Max_addr[i]);
-    Servos_Min[i] = (byte) EEPROM.read(Servos_Min_addr[i]);
-    Servos_Idle[i] = (byte) EEPROM.read(Servos_Idle_addr[i]);
-    Servos_Rev[i] = (byte) EEPROM.read(Servos_Rev_addr[i]);
-  }
-  
-  for (i=0;i<NO_PWM;i++)
-  {
      if(!Pin_type[i])
      {
        Servos[i].attach(Servos_Pin[i]);
-       Servos_Angle[i] = Servos_Idle[i];
+       Servos_Angle[i] = Servos_Idle[i];       
        Servos[i].write(Servos_Angle[i]);
      }
      else
@@ -101,148 +92,193 @@ void setup()
 } 
  
 void loop() 
-{
-  byte buffer[7];
+{  
   byte  zbee;
   byte cmd;
   byte  addr;
-  byte  val;
+  byte  val0;
+  byte  val1;
+  byte  val2;
+  byte  val3;
+  byte  val4;
+  byte  val5;
   byte  CRC1;
   
-  char temp;
+  byte msg = ser_message();
   
-  if (Serial.available() > 0) 
+  if(msg==2)
   {
-    
-    // get incoming byte:
-    temp = Serial.read();
-    if( temp == '$' ) 
-    {
-      buffer[0] = (byte) '$';
-      for(int i=1; i<7; i++) 
-      {
-        buffer[i] = Serial.read();
-      }
-      
-      zbee = buffer[1]; //zbee addr
-      cmd =  buffer[2]; //Address to read or write
-      addr = buffer[3];
-      val = buffer[4];
-      CRC1 = buffer[5];      
-      
-      for(int i=0; i<7; i++) 
-      {
-        Serial.write(buffer[i]);
-      }
-      
-      if(CRC1 == getCheckSum(buffer,5) || CRC1 == '%') //Ensure the message is valid
-      {
-        if(zbee == Zigbee_id) //Ensure that this is the intended destination
-        {
-          if(cmd == 0x52) // 'R'
-          {
-            byte return_buffer[7]; //return string framework $, 0, addr, val, crc
-            return_buffer[0] = (byte) '$';
-            return_buffer[1] = (byte) EEPROM.read(Zigbee_id_addr);
-            return_buffer[2] = 0x00; // reply cmd
-            return_buffer[3] = addr;
-            return_buffer[4] = (byte) EEPROM.read(addr);
-            return_buffer[5] = getCheckSum(return_buffer,4);
-            return_buffer[6] = (byte)  '^';
-            
-            for(int i=0; i<7; i++) 
-            {
-              Serial.write(return_buffer[i]);
-            }
-            
-          }
-          else if(cmd == 0x57) //'W'
-          {
-            EEPROM.write(addr, val);
-            byte return_buffer[7]; //return string framework $, 0, addr, val, crc
-            return_buffer[0] = (byte) '$';
-            return_buffer[1] = (byte) EEPROM.read(Zigbee_id_addr);
-            return_buffer[2] = 0x01; // write reply cmd
-            return_buffer[3] = addr;
-            return_buffer[4] = (byte) EEPROM.read(addr);
-            return_buffer[5] = getCheckSum(return_buffer,4);
-            return_buffer[6] = (byte)  '^';
-            
-            for(int i=0; i<7; i++) 
-            {
-              Serial.write(return_buffer[i]);
-            }            
-            
-            if (addr == 1)
-            {
-              Zigbee_id = val;
-            }
-            if (addr == 2)
-            {
-              Servos_Enable_pin = val;
-            }
-            if (addr > 9) 
-            {
-              unsigned int type = addr/10;
-              unsigned int sel = addr%10;
-              switch(type) //Select Servo Pin
-              { 
-                case 1:
-                  Pin_type[sel] = val;
-                  break;
-                case 2:
-                  Servos_Pin[sel] = val;
-                  break;
-                case 3:
-                  Servos_Angle[sel] = val;                  
-                  break;
-                case 4:
-                  Servos_Speed[sel] = val;
-                  break;
-                case 5:
-                  Servos_Max[sel] = val;
-                  break;
-                case 6:
-                  Servos_Min[sel] = val;
-                  break;
-                case 7:
-                  Servos_Idle[sel] = val;
-                  break;
-                case 8:
-                  Servos_Rev[sel] = val;
-                  break;
-                default:
-                  val = val;           
-                  break; 
-              }
-            }
-          }
-        } 
-        else
-        {
-          Serial.println("Flush");
-          Serial.flush();
-        }  
-      }      
-    }
+    ser_send(7, Zigbee_id, 0x40, 0);
   }
-  
+  if (msg==1)
+  {
+      zbee = input_buffer[3]; //zbee addr
+      cmd =  input_buffer[4]; //read or write
+      addr = input_buffer[7]; // Start Addr      
+      
+      if(zbee == Zigbee_id) //Ensure the message is valid and For this Recevier
+      {
+        switch(cmd)
+        {
+           case 0x02:
+           {
+              byte return_buffer[7]; //return string framework $, 0, addr, val, crc
+              return_buffer[0] = addr;
+              return_buffer[1] = Servos_Angle[0];
+              return_buffer[2] = Servos_Angle[1];
+              return_buffer[3] = Servos_Angle[2];
+              return_buffer[4] = Servos_Angle[3];
+              return_buffer[5] = Servos_Angle[4];
+              return_buffer[6] = Servos_Angle[5];
+
+              ser_send(14, Zigbee_id, 0x42, return_buffer);
+              
+              break;
+           }
+           case 0x01:
+           {
+             
+              Servos_Angle[0] = input_buffer[8];      
+              Servos_Angle[1] = input_buffer[9];
+              Servos_Angle[2] = input_buffer[10];
+              Servos_Angle[3] = input_buffer[11];
+              Servos_Angle[4] = input_buffer[12];
+              Servos_Angle[5] = input_buffer[13];
+                                      
+              byte return_buffer[1];
+              
+              return_buffer[0] = addr;
+                            
+              ser_send(8, Zigbee_id, 0x41, return_buffer);              
+              
+              
+              break;
+           } 
+        }
+      }
+         
+    }  
   delay(50);
 }
 
-// Calculates the checksum for a given buffer
-// returns as integer
-byte getCheckSum(byte *buffer, int length) 
+//Using Herculex servo comms packet
+byte ser_send(byte len, byte pid, byte cmd, const byte *data)
 {
-  int i;
-  byte XOR;
-  byte c;
-  // Calculate checksum ignoring any $'s in the string
-  for (XOR = 0, i = 0; i < length; i++) {
-    c = buffer[i];
-    XOR ^= c;
+  byte sbuf[255];
+  sbuf[0] = 0xFF;
+  sbuf[1] = 0xFF;
+  sbuf[2] = len;
+  sbuf[3] = pid;
+  sbuf[4] = cmd;
+  sbuf[5] = 0x00;
+  sbuf[6] = 0x00;
+  for(int i=0;i<(len-7);i++) sbuf[7+i] = data[i];
+  unsigned int crc = getCheckSum(sbuf);
+  
+  sbuf[5] = (byte) ((crc & 0xFF00) >> 8);
+  sbuf[6] = (byte) (crc & 0x00FF);
+  
+  for(int i=0;i<len;i++) Serial.write(sbuf[i]);
+
+  return 1;
+}
+
+byte ser_message() // Returns 0x01 if recived packet, 0xFF on timeout
+{
+  byte c = 0;
+  byte beg = 0;
+  byte state = 0;
+  byte checksum1;
+  byte checksum2;
+  byte i = 0;
+//  unsigned long currentMillis = millis();
+//  long interval = 1000 + currentMillis;
+  
+  while(1)
+  {
+    if ((Serial.available() > 0)) 
+    {    
+      c = Serial.read();
+      //Serial.write(c);
+      switch(state)
+      {
+        case 0:
+        {          
+          if(c==0xFF)
+          {
+            input_buffer[i++]=c;
+            input_buffer[i++]=c;
+            state++;
+          }
+          else
+          {
+            i=0;
+            state=0;
+          }
+          break;      
+        }        
+        case 1:
+        {                  
+          if(c > 6 && c < 224)
+          {
+            input_buffer[i++] = c;
+            state++;
+          }
+          else
+          {
+            i=0;
+            state=0;
+            if(c==0xFF)
+            {
+              input_buffer[i++]=c;
+              input_buffer[i++]=c;
+              state++;
+            }
+          }
+          break;
+        }
+        case 2:
+        {          
+          input_buffer[i++] = c;
+          if(i==input_buffer[2])state++;
+          break;   
+        }
+      }    
+    }
+    if(state==3)
+    {      
+      unsigned int crc = getCheckSum(input_buffer);
+      checksum2 = (byte) ((crc & 0xFF00) >> 8);
+      checksum1 = (byte) (crc & 0x00FF);
+      if((checksum1) == input_buffer[5] && (checksum2) == input_buffer[6]){
+        *buffer = *input_buffer;
+        return 1;
+      }
+      else return 2;         
+    }    
   }
-  return XOR;
+  return 0;
+}
+
+// Calculates the checksum for a given buffer
+// returns as byte
+unsigned int getCheckSum(const byte *data) 
+{
+  byte *bytes = (byte *) data;
+  unsigned int crc;
+  
+  byte CheckSum1 = bytes[2] ^ bytes[3] ^ bytes[4];
+  for (int i = 0; i < ((int) bytes[2] - 7); i++)
+        CheckSum1 ^= bytes[7 + i];
+  
+  byte CheckSum2 = ~(CheckSum1);
+    CheckSum1 &= 0xFE;
+    CheckSum2 &= 0xFE;
+  
+  crc = CheckSum1;
+  crc |= CheckSum2 << 8; 
+  
+  return crc;
 }
 
 int chartoint(char inchar)
@@ -265,11 +301,11 @@ void ServoCall()
       byte angle;
       if (Servos_Rev[i])
       {
-        angle = map(Servos_Angle[i],0,255,Servos_Max[i],Servos_Min[i]);
+        angle = (byte)map(Servos_Angle[i],0,255,Servos_Max[i],Servos_Min[i]);
       }
       else
       {
-        angle = map(Servos_Angle[i],0,255,Servos_Min[i],Servos_Max[i]);
+        angle = (byte)map(Servos_Angle[i],0,255,Servos_Min[i],Servos_Max[i]);
       }
       
       Servos[i].write(NextServoPos(i,angle,Servos_Speed[i]));
