@@ -1,19 +1,27 @@
 #include <FlexiTimer2.h>
 #include <EEPROM.h>
 #include <Servo.h> 
+#include <math.h>
 
 #define NO_PWM 6
 
+#define L1 15.0
+#define L2 130.0
+#define L3 130.0
+#define L4 70.0
+
 byte addr = 0; //EEPROM address
 
-byte EEPROM_Initialised_addr = 0;
-byte EEPROM_Initialised;
-
-byte Zigbee_id_addr = 1; // Holds identifier for Xbee communication
-byte Zigbee_id = 2;
-
-byte Servos_Enable_pin_addr = 2;
+byte Zigbee_id = 2; // pid for comms protocol
 byte Servos_Enable_pin = 4;
+
+float arm_pos[6] = {100.0,00.0,100.0,-30.0,0.0,0.0}; // x, y, z, pitch, roll, claw
+const rad_180 = (M_PI);
+const rad_170 = (M_PI*0.944444444);
+const rad_156 = (M_PI*0.866666666);
+const rad_78 = (M_PI*0.4333333333);
+const rad_10 = (M_PI*0.0555555555);
+
 
 Servo Servos[NO_PWM];
 byte Pin_type_addr[NO_PWM] = {10,11,12,13,14,15};
@@ -30,7 +38,9 @@ byte Servos_Pin[NO_PWM] = {3,5,6,10,9,11};
 byte Servos_Speed[NO_PWM] = {3,2,2,2,2,4};
 byte Servos_Angle[NO_PWM] = {90,90,90,90,90,90};
 byte Servos_Max[6] = {180,170,170,170,180,156};
+float Servos_Max_rad[6] = {rad_180, rad_170, rad_170, rad_170, rad_180, rad_156};
 byte Servos_Min[6] = {0,10,10,10,0,78};
+float Servos_Min_rad[6] = 0, rad_10,rad_10,rad_10,0,rad_78};
 byte Servos_Idle[6] = {128,184,128,10,128,128};
 byte Servos_Rev[NO_PWM] = {0,0,0,1,0,0}; // 0-standard, 1-reversed
 
@@ -41,32 +51,8 @@ void setup()
 { 
   int i=0; // loop variable
   
-  EEPROM_Initialised = EEPROM.read(EEPROM_Initialised_addr);
-  
-  
-  //
-  
-  if(EEPROM_Initialised == 255)
-  {
-    EEPROM.write(EEPROM_Initialised_addr, 1);
-    EEPROM.write(Zigbee_id_addr, Zigbee_id);    
-    EEPROM.write(Servos_Enable_pin_addr, Servos_Enable_pin);
-    for (i=0;i<NO_PWM;i++)
-    {
-      EEPROM.write(Pin_type_addr[i], Pin_type[i]);
-      EEPROM.write(Servos_Pin_addr[i], Servos_Pin[i]);
-      EEPROM.write(Servos_Angle_addr[i], Servos_Idle[i]);
-      EEPROM.write(Servos_Speed_addr[i], Servos_Speed[i]);
-      EEPROM.write(Servos_Max_addr[i], Servos_Max[i]);
-      EEPROM.write(Servos_Min_addr[i], Servos_Min[i]);
-      EEPROM.write(Servos_Idle_addr[i], Servos_Idle[i]);
-      EEPROM.write(Servos_Rev_addr[i], Servos_Rev[i]);
-    }
-  }
-  
-  Zigbee_id = EEPROM.read(Zigbee_id_addr);
-  
-  Servos_Enable_pin = EEPROM.read(Servos_Enable_pin_addr);
+  inv_kinematics(arm_pos,Servos_Angle);
+
   pinMode(Servos_Enable_pin, OUTPUT);
   digitalWrite(Servos_Enable_pin, LOW);
   
@@ -74,8 +60,7 @@ void setup()
   {
      if(!Pin_type[i])
      {
-       Servos[i].attach(Servos_Pin[i]);
-       Servos_Angle[i] = Servos_Idle[i];       
+       Servos[i].attach(Servos_Pin[i]);   
        Servos[i].write(Servos_Angle[i]);
      }
      else
@@ -88,9 +73,12 @@ void setup()
   FlexiTimer2::start();
   
   Serial.begin(115200);  
-  Serial.write((byte) EEPROM.read(Zigbee_id_addr));
+  
+  digitalWrite(Servos_Enable_pin, HIGH);  
 } 
- 
+
+float x_inc = 1.0;
+
 void loop() 
 {  
   byte  zbee;
@@ -104,7 +92,20 @@ void loop()
   byte  val5;
   byte  CRC1;
   
-  byte msg = ser_message();
+  byte msg = 0;//ser_message();
+  
+  
+  if(arm_pos[5] >= 0.95)
+  {
+    x_inc = -0.02;
+  }
+  else if(arm_pos[5] <= 0.05)
+  {
+    x_inc = 0.02;
+  }
+  
+  arm_pos[5] = arm_pos[5] + x_inc;
+  print_ang();
   
   if(msg==2)
   {
@@ -157,8 +158,98 @@ void loop()
         }
       }
          
-    }  
+    }
   delay(50);
+}
+
+int print_ang()
+{
+ Serial.print("phi1 = : ");
+  Serial.println((int)Servos_Angle[0]);
+  Serial.print("phi2 = : ");
+  Serial.println((int)Servos_Angle[1]);
+  Serial.print("phi3 = : ");
+  Serial.println((int)Servos_Angle[2]);
+  Serial.print("phi4 = : ");
+  Serial.println((int)Servos_Angle[3]);
+  Serial.print("roll = : ");
+  Serial.println((int)Servos_Angle[4]);
+  Serial.print("claw = : ");
+  Serial.println((int)Servos_Angle[5]);
+  Serial.println("");
+ return 1; 
+}
+
+float deg(float radian)
+{
+    return radian * (180.0 / M_PI);
+}
+
+float rad(float degree)
+{
+    return degree * (M_PI/180.0);
+}
+
+byte ang_to_pos(float x)
+{
+    float y = ((x)*(255.0/180.0));
+    if(y<0.0) y=0.0;
+    if(y>255.0) y=255.0;
+    return (byte)(y+0.5);
+}
+
+byte inv_kinematics(float *pos,byte *retbuffer)
+{
+  float x = pos[0];
+  float y = pos[1];
+  float z = pos[2];
+  float p = rad(pos[3]);  //-90.0 to 90.0
+  float r = pos[4];       //-90.0 to 90.0
+  float c = pos[5];       //0.0 to 0.1
+  
+  float phi1=0;
+  float phi2=0;
+  float phi3=0;
+  float phi4=0;
+  
+  float L5 = ((26.0)*sin(rad(255.0*c)/3.269)+(80.0));
+  phi1 = atan2(y,x);
+  
+  if (abs(phi1) > M_PI/2) return 0; // Out of range
+  
+  float x1 = L1*cos(phi1);
+  float y1 = L1*sin(phi1);
+  
+  float L45 = L4 + L5;
+  float xy3 = L45*cos(p);
+  float x3 = x - xy3*cos(phi1);
+  float y3 = y - xy3*sin(phi1);
+  float z3 = z - L45*sin(p);
+  
+  float L23 = sqrt((x3-x1)*(x3-x1) + (y3-y1)*(y3-y1) + (z3-0)*(z3-0));
+  
+  if(L23 < 80.0 || L23 > (L2 + L3)) return 0; // Out of range
+  
+  float xy = sqrt(x*x + y*y);  
+  float xy1= xy-L1- cos(p)*L45;
+  float z1 = z-sin(p)*L45;
+  
+  phi2 = acos((L2*L2 + L23*L23 - L3*L3)/(2*L2*L23))+atan2(z1,xy1);
+  
+  if (phi2 > Servos_Max_rad[1] || phi2 < Servos_Min_rad[1] ) return 0; // Out of range  
+  phi3 = acos((L2*L2 + L3*L3 - L23*L23)/(2*L2*L3));
+  if (phi3 > Servos_Max_rad[2] || phi3 < Servos_Min_rad[2] ) return 0; // Out of range 
+  phi4 = p-(phi2+phi3)+M_PI;
+  if (phi4 > Servos_Max_rad[3] || phi4 < Servos_Min_rad[3] ) return 0; // Out of range 
+  
+  retbuffer[0] = deg(phi1 + M_PI/2);
+  retbuffer[1] = deg(phi2);
+  retbuffer[2] = deg(phi3);
+  retbuffer[3] = deg(phi4+M_PI/2.0);
+  retbuffer[4] = (byte)(r + 90.0);
+  retbuffer[5] = (byte)(78.0*c + 78.0)+0.5);
+
+  return 1;
 }
 
 //Using Herculex servo comms packet
@@ -289,26 +380,10 @@ int chartoint(char inchar)
 
 void ServoCall()
 {
-  
+  inv_kinematics(arm_pos,Servos_Angle);
   for (int i=0;i<NO_PWM;i++)
-  {
-    if(Pin_type[i])
-    {
-      analogWrite(Servos_Pin[i], Servos_Angle[i]);
-    }
-    else
-    {
-      byte angle;
-      if (Servos_Rev[i])
-      {
-        angle = (byte)map(Servos_Angle[i],0,255,Servos_Max[i],Servos_Min[i]);
-      }
-      else
-      {
-        angle = (byte)map(Servos_Angle[i],0,255,Servos_Min[i],Servos_Max[i]);
-      }
-      
-      Servos[i].write(NextServoPos(i,angle,Servos_Speed[i]));
+  {     
+      Servos[i].write(NextServoPos(i,Servos_Angle[i],Servos_Speed[i]));
     }
   }
   
